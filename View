@@ -1,0 +1,62 @@
+CREATE VIEW Report_Customer AS
+-- Customer's info
+
+WITH Customer_basic_info AS (
+SELECT
+C.customer_key,
+CONCAT(C.first_name, ' ', C.last_name) AS full_name,
+datediff(year,C.birthdate,GETDATE()) as age,
+C.gender,
+S.order_date,
+S.order_number,
+S.product_key,
+S.quantity,
+S.sales_amount
+FROM gold.dim_customers C
+JOIN dbo.fact_sales S
+	ON C.customer_key = S.customer_key
+WHERE S.order_date IS NOT NULL)
+
+, Customer_Aggregations AS (
+SELECT 
+customer_key,
+full_name,
+age,
+gender,
+COUNT(DISTINCT order_number) AS total_orders,
+SUM(sales_amount) AS total_spend,
+SUM(quantity) AS total_quantity,
+COUNT(DISTINCT product_key) AS total_products, 
+MAX(order_date) AS last_order,
+DATEDIFF(month, MIN(order_date), MAX(order_date))+1 AS months_active
+FROM Customer_basic_info
+GROUP BY customer_key,
+full_name,
+age,
+gender
+)
+
+SELECT customer_key,
+full_name,
+age,
+CASE WHEN age < 20 THEN 'Under 20'
+WHEN age BETWEEN 20 AND 28 THEN 'Young Adults'
+WHEN age BETWEEN 29 AND 40 THEN 'Adults'
+WHEN age BETWEEN 41 AND 59 THEN 'Mature Adults'
+ELSE 'Senior'
+END AS age_group,
+gender,
+total_spend,
+total_orders,
+total_quantity,
+months_active,
+	CASE WHEN months_active >= 12 AND Total_Spend > 5000 THEN 'VIP'
+	WHEN months_active >= 12 AND Total_Spend  <= 5000 THEN 'Regular'
+	WHEN months_active BETWEEN 1 AND  11 AND Total_Spend  >= 1500 THEN 'Potential VIP'
+	WHEN months_active < 12  THEN 'New'
+	END AS Class_Customer,
+total_spend/total_orders as AVG_order_value,
+total_spend/months_active AS AVG_monthly_spend,
+last_order,
+DATEDIFF(year,last_order,GETDATE()) AS years_since_LO
+FROM Customer_Aggregations
